@@ -1,0 +1,54 @@
+services:
+  # Cassandra - storage backend for Jaeger
+  cassandra:
+    image: cassandra:5.0
+    ports:
+      - "9042:9042"
+    environment:
+      - CASSANDRA_LISTEN_ADDRESS=cassandra
+      - MAX_HEAP_SIZE=512M
+      - HEAP_NEWSIZE=100M
+    networks:
+      - jaeger-net
+
+  # Jaeger Cassandra Schema - initializes the Cassandra database with required schema
+  jaeger-cassandra-schema:
+    image: jaegertracing/jaeger-cassandra-schema:1.67.0
+    depends_on:
+      - cassandra
+    environment:
+      - MODE=test
+      - CASSANDRA_SERVERS=cassandra
+      - CASSANDRA_KEYSPACE=jaeger_v1_dc1
+    networks:
+      - jaeger-net
+
+  # Jaeger - distributed tracing system
+  jaeger:
+    image: jaegertracing/all-in-one:1.67.0
+    ports:
+      - "16686:16686"      # serve the frontend
+    environment:
+      - SPAN_STORAGE_TYPE=cassandra
+      - CASSANDRA_SERVERS=cassandra
+      - CASSANDRA_KEYSPACE=jaeger_v1_dc1
+    depends_on:
+      - cassandra
+      - jaeger-cassandra-schema
+    networks:
+      - jaeger-net
+
+  # Jaeger Tracgen - trace generator for Jaeger
+  jaeger-tracgen:
+    image: jaegertracing/jaeger-tracegen:1.67.0
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+    depends_on:
+      - jaeger
+    command: ["--workers=5", "--traces=10"]
+    networks:
+      - jaeger-net
+
+networks:
+  jaeger-net:
+    driver: bridge
